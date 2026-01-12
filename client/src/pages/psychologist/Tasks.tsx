@@ -32,9 +32,17 @@ interface Patient {
   name: string;
 }
 
+interface Exercise {
+  id: string;
+  title: string;
+  description: string;
+  duration: number;
+}
+
 export default function PsychologistTasks() {
   const [patients, setPatients] = useState<Record<string, Patient>>({});
   const [tasks, setTasks] = useState<TherapeuticTask[]>([]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [formData, setFormData] = useState({
@@ -50,11 +58,21 @@ export default function PsychologistTasks() {
   useEffect(() => {
     loadPatients();
     loadTasks();
+    loadExercises();
     
     // Refresh tasks every 5 seconds to see updates from patients
     const interval = setInterval(loadTasks, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const loadExercises = async () => {
+    try {
+      const response = await axios.get('/api/exercises');
+      setExercises(response.data);
+    } catch (error) {
+      console.error('Failed to load exercises', error);
+    }
+  };
 
   const loadPatients = async () => {
     try {
@@ -207,7 +225,10 @@ export default function PsychologistTasks() {
               <select
                 required
                 value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                onChange={(e) => {
+                  const newType = e.target.value as any;
+                  setFormData({ ...formData, type: newType, exerciseId: newType !== 'exercise' ? '' : formData.exerciseId });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
               >
                 <option value="exercise">Exercițiu</option>
@@ -216,6 +237,37 @@ export default function PsychologistTasks() {
                 <option value="other">Altceva</option>
               </select>
             </div>
+
+            {formData.type === 'exercise' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selectează exercițiu (opțional)
+                </label>
+                <select
+                  value={formData.exerciseId}
+                  onChange={(e) => {
+                    const selectedExercise = exercises.find(ex => ex.id === e.target.value);
+                    setFormData({
+                      ...formData,
+                      exerciseId: e.target.value,
+                      title: selectedExercise ? selectedExercise.title : formData.title,
+                      description: selectedExercise ? selectedExercise.description : formData.description
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">Selectează un exercițiu sau lasă gol pentru sarcină personalizată</option>
+                  {exercises.map(exercise => (
+                    <option key={exercise.id} value={exercise.id}>
+                      {exercise.title} (~{exercise.duration} min)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Selectând un exercițiu, titlul și descrierea vor fi completate automat. Poți modifica apoi dacă dorești.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -40,7 +40,16 @@ export default function PsychologistPatients() {
 
   useEffect(() => {
     loadPatients();
-  }, []);
+    
+    // Auto-refresh patient progress every 30 seconds for real-time monitoring
+    const interval = setInterval(() => {
+      if (selectedPatient) {
+        loadPatientProgress(selectedPatient.patient.id);
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [selectedPatient]);
 
   const loadPatients = async () => {
     try {
@@ -190,10 +199,22 @@ export default function PsychologistPatients() {
               </div>
             )}
 
-            <div className="mt-6">
+            <div className="mt-6 flex gap-2 flex-wrap">
+              <Link
+                to={`/patients/${selectedPatient.patient.id}/record`}
+                className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+              >
+                📁 Dosar electronic
+              </Link>
+              <Link
+                to={`/patients/${selectedPatient.patient.id}/assessments`}
+                className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+              >
+                📊 Evaluări standardizate
+              </Link>
               <Link
                 to={`/messages?userId=${selectedPatient.patient.id}`}
-                className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 mr-2"
+                className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700"
               >
                 Trimite mesaj
               </Link>
@@ -203,6 +224,12 @@ export default function PsychologistPatients() {
               >
                 Programează ședință
               </Link>
+            </div>
+            
+            {/* Real-time monitoring indicator */}
+            <div className="mt-4 text-xs text-gray-500 flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              Monitorizare în timp real (actualizare automată la fiecare 30 secunde)
             </div>
           </div>
         </div>
@@ -228,15 +255,24 @@ export default function PsychologistPatients() {
                 <div className="text-4xl mb-3">👤</div>
                 <h3 className="text-xl font-semibold mb-1">{patient.name}</h3>
                 <p className="text-gray-600 text-sm mb-4">{patient.email}</p>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    loadPatientProgress(patient.id);
-                  }}
-                  className="w-full bg-primary-600 text-white py-2 rounded hover:bg-primary-700"
-                >
-                  Vezi progres
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      loadPatientProgress(patient.id);
+                    }}
+                    className="flex-1 bg-primary-600 text-white py-2 rounded hover:bg-primary-700"
+                  >
+                    Vezi progres
+                  </button>
+                  <Link
+                    to={`/patients/${patient.id}/record`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 bg-purple-600 text-white py-2 rounded hover:bg-purple-700 text-center"
+                  >
+                    Dosar
+                  </Link>
+                </div>
               </div>
             ))
           )}

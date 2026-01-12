@@ -22,6 +22,7 @@ export default function Layout() {
     { path: '/', label: 'Dashboard' },
     { path: '/journal', label: 'Jurnal' },
     { path: '/exercises', label: 'Exerciții' },
+    { path: '/assessments', label: 'Evaluări' },
     { path: '/schedules', label: 'Programări' },
     { path: '/tasks', label: 'Sarcini' },
     { path: '/materials', label: 'Resurse' },

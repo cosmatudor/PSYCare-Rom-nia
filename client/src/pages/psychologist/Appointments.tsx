@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, getDay } from 'date-fns';
 import { ro } from 'date-fns/locale';
 
 interface Appointment {
@@ -22,12 +22,16 @@ export default function PsychologistAppointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Record<string, Patient>>({});
   const [showForm, setShowForm] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [formData, setFormData] = useState({
     patientId: '',
     dateTime: '',
     duration: 60,
     type: 'online' as 'online' | 'offline',
-    meetingLink: ''
+    meetingLink: '',
+    autoGenerateLink: false
   });
   const [loading, setLoading] = useState(true);
 
@@ -35,6 +39,52 @@ export default function PsychologistAppointments() {
     loadAppointments();
     loadPatients();
   }, []);
+
+  useEffect(() => {
+    if (appointments.length > 0) {
+      checkUpcomingAppointments();
+      // Check for upcoming appointments every minute
+      const interval = setInterval(checkUpcomingAppointments, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [appointments]);
+
+  const checkUpcomingAppointments = () => {
+    if (appointments.length === 0) return;
+    
+    const now = new Date();
+    const upcoming = appointments.filter(a => {
+      if (a.status !== 'scheduled') return false;
+      const appointmentDate = new Date(a.dateTime);
+      const timeDiff = appointmentDate.getTime() - now.getTime();
+      // Check if appointment is in next 24 hours and not yet notified
+      return timeDiff > 0 && timeDiff <= 24 * 60 * 60 * 1000;
+    });
+
+    if (upcoming.length > 0 && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        upcoming.forEach(appointment => {
+          const appointmentDate = new Date(appointment.dateTime);
+          const hoursUntil = Math.floor((appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60));
+          
+          // Only notify if less than 24 hours away and not already notified today
+          const notificationKey = `appointment-${appointment.id}-${appointmentDate.toDateString()}`;
+          if (!localStorage.getItem(notificationKey) && hoursUntil <= 24) {
+            const patientName = patients[appointment.patientId]?.name || 'Pacient';
+            new Notification('Reminder: Ședință programată', {
+              body: `Ai o ședință cu ${patientName} ${hoursUntil === 0 ? 'astăzi' : `în ${hoursUntil} ore`}: ${format(appointmentDate, "d MMMM yyyy 'la' HH:mm", { locale: ro })}`,
+              icon: '/favicon.ico',
+              tag: notificationKey
+            });
+            localStorage.setItem(notificationKey, 'true');
+          }
+        });
+      } else if (Notification.permission === 'default') {
+        // Request permission if not yet requested
+        Notification.requestPermission();
+      }
+    }
+  };
 
   const loadAppointments = async () => {
     try {
@@ -68,17 +118,39 @@ export default function PsychologistAppointments() {
     }
   };
 
+  const generateMeetingLink = (type: 'zoom' | 'meet'): string => {
+    if (type === 'zoom') {
+      // Generate a Zoom meeting link format (in production, use Zoom API)
+      const meetingId = Math.random().toString(36).substring(2, 15);
+      return `https://zoom.us/j/${meetingId}`;
+    } else {
+      // Generate a Google Meet link format (in production, use Google Calendar API)
+      const meetingCode = Math.random().toString(36).substring(2, 12);
+      return `https://meet.google.com/${meetingCode}`;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post('/api/appointments', formData);
+      let finalFormData = { ...formData };
+      
+      // Auto-generate meeting link if requested
+      if (formData.type === 'online' && formData.autoGenerateLink && !formData.meetingLink) {
+        // Default to Google Meet, but could be made configurable
+        finalFormData.meetingLink = generateMeetingLink('meet');
+        alert(`Link generat automat: ${finalFormData.meetingLink}\n\nNotă: În producție, acest link ar fi generat prin API-ul Zoom/Google Meet.`);
+      }
+
+      await axios.post('/api/appointments', finalFormData);
       setShowForm(false);
       setFormData({
         patientId: '',
         dateTime: '',
         duration: 60,
         type: 'online',
-        meetingLink: ''
+        meetingLink: '',
+        autoGenerateLink: false
       });
       await loadAppointments();
       alert('Programarea a fost creată!');
@@ -87,6 +159,29 @@ export default function PsychologistAppointments() {
       alert(errorMessage);
       console.error('Appointment creation error:', error);
     }
+  };
+
+  const getAppointmentsForDate = (date: Date): Appointment[] => {
+    return appointments.filter(a => {
+      const appointmentDate = new Date(a.dateTime);
+      return isSameDay(appointmentDate, date) && a.status === 'scheduled';
+    });
+  };
+
+  const calendarDays = () => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 }); // Monday
+    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+    return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+  };
+
+  const handleDateClick = (date: Date) => {
+    setSelectedDate(date);
+    const dateStr = format(date, "yyyy-MM-dd");
+    const timeStr = format(new Date(), "HH:mm");
+    setFormData({ ...formData, dateTime: `${dateStr}T${timeStr}` });
+    setShowForm(true);
   };
 
   if (loading) {
@@ -105,6 +200,12 @@ export default function PsychologistAppointments() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Programări</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
+            className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+          >
+            {viewMode === 'list' ? '📅 Calendar' : '📋 Listă'}
+          </button>
           <button
             onClick={async () => {
               try {
@@ -125,16 +226,118 @@ export default function PsychologistAppointments() {
             }}
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
           >
-            📅 Exportă calendar
+            📥 Exportă calendar
           </button>
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              setSelectedDate(null);
+              setShowForm(!showForm);
+            }}
             className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700"
           >
             {showForm ? 'Anulează' : '+ Programează ședință'}
           </button>
         </div>
       </div>
+
+      {/* Notification Permission */}
+      {viewMode === 'list' && 'Notification' in window && Notification.permission === 'default' && (
+        <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
+          <p className="text-blue-800 text-sm mb-2">
+            💡 Activează notificările pentru a primi reminder-e automate pentru programările tale!
+          </p>
+          <button
+            onClick={async () => {
+              await Notification.requestPermission();
+              checkUpcomingAppointments();
+            }}
+            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+          >
+            Activează notificările
+          </button>
+        </div>
+      )}
+
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">
+              {format(currentMonth, 'MMMM yyyy', { locale: ro })}
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                ←
+              </button>
+              <button
+                onClick={() => setCurrentMonth(new Date())}
+                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Astăzi
+              </button>
+              <button
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 mb-2">
+            {['Lun', 'Mar', 'Mie', 'Joi', 'Vin', 'Sâm', 'Dum'].map(day => (
+              <div key={day} className="text-center text-sm font-semibold text-gray-600 py-2">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays().map((day, idx) => {
+              const dayAppointments = getAppointmentsForDate(day);
+              const isCurrentMonth = isSameMonth(day, currentMonth);
+              const isToday = isSameDay(day, new Date());
+              const isSelected = selectedDate && isSameDay(day, selectedDate);
+
+              return (
+                <div
+                  key={idx}
+                  onClick={() => handleDateClick(day)}
+                  className={`
+                    min-h-[80px] p-1 border border-gray-200 rounded cursor-pointer hover:bg-gray-50
+                    ${!isCurrentMonth ? 'bg-gray-50 text-gray-400' : ''}
+                    ${isToday ? 'bg-blue-50 border-blue-300' : ''}
+                    ${isSelected ? 'bg-primary-50 border-primary-300' : ''}
+                  `}
+                >
+                  <div className={`text-sm font-medium mb-1 ${isToday ? 'text-blue-600' : ''}`}>
+                    {format(day, 'd')}
+                  </div>
+                  <div className="space-y-1">
+                    {dayAppointments.slice(0, 2).map(apt => (
+                      <div
+                        key={apt.id}
+                        className="text-xs bg-primary-100 text-primary-700 px-1 rounded truncate"
+                        title={`${patients[apt.patientId]?.name || 'Pacient'} - ${format(new Date(apt.dateTime), 'HH:mm')}`}
+                      >
+                        {format(new Date(apt.dateTime), 'HH:mm')} {patients[apt.patientId]?.name?.split(' ')[0] || ''}
+                      </div>
+                    ))}
+                    {dayAppointments.length > 2 && (
+                      <div className="text-xs text-gray-500">
+                        +{dayAppointments.length - 2} mai multe
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -209,17 +412,45 @@ export default function PsychologistAppointments() {
             </div>
 
             {formData.type === 'online' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Link ședință (Zoom/Google Meet)
-                </label>
-                <input
-                  type="url"
-                  value={formData.meetingLink}
-                  onChange={(e) => setFormData({ ...formData, meetingLink: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.autoGenerateLink}
+                      onChange={(e) => setFormData({ ...formData, autoGenerateLink: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Generează automat link pentru ședință (Google Meet)
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">
+                    Notă: În producție, acest link ar fi generat prin API-ul Zoom/Google Meet
+                  </p>
+                </div>
+                {!formData.autoGenerateLink && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Link ședință (Zoom/Google Meet)
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.meetingLink}
+                      onChange={(e) => setFormData({ ...formData, meetingLink: e.target.value })}
+                      placeholder="https://meet.google.com/... sau https://zoom.us/j/..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <div className="mt-2 text-xs text-gray-600 space-y-1">
+                      <p>💡 Instrucțiuni pentru link-uri:</p>
+                      <ul className="list-disc list-inside ml-2 space-y-1">
+                        <li><strong>Google Meet:</strong> Creează o întâlnire în Google Calendar și copiază link-ul</li>
+                        <li><strong>Zoom:</strong> Creează o întâlnire în Zoom și copiază link-ul de participare</li>
+                        <li>Alternativ, folosește opțiunea de generare automată de mai sus</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -233,7 +464,8 @@ export default function PsychologistAppointments() {
         </div>
       )}
 
-      {/* Upcoming */}
+      {/* Upcoming - Only show in list view */}
+      {viewMode === 'list' && (
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-4">Programări viitoare</h2>
         {upcomingAppointments.length === 0 ? (
@@ -266,18 +498,51 @@ export default function PsychologistAppointments() {
                       </a>
                     )}
                   </div>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                    Programat
-                  </span>
+                  <div className="flex flex-col gap-2 items-end">
+                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                      Programat
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await axios.put(`/api/appointments/${appointment.id}`, { status: 'completed' });
+                            await loadAppointments();
+                          } catch (error) {
+                            alert('Eroare la actualizarea programării');
+                          }
+                        }}
+                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                      >
+                        Marchează completat
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (confirm('Ești sigur că vrei să anulezi această programare?')) {
+                            try {
+                              await axios.put(`/api/appointments/${appointment.id}`, { status: 'cancelled' });
+                              await loadAppointments();
+                            } catch (error) {
+                              alert('Eroare la anularea programării');
+                            }
+                          }
+                        }}
+                        className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200"
+                      >
+                        Anulează
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+      )}
 
-      {/* Past */}
-      {pastAppointments.length > 0 && (
+      {/* Past - Only show in list view */}
+      {viewMode === 'list' && pastAppointments.length > 0 && (
         <div>
           <h2 className="text-xl font-semibold mb-4">Istoric programări</h2>
           <div className="space-y-4">

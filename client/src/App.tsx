@@ -8,12 +8,15 @@ import PatientSchedules from './pages/patient/Schedules';
 import PatientTasks from './pages/patient/Tasks';
 import PatientMaterials from './pages/patient/Materials';
 import PatientMessages from './pages/patient/Messages';
+import PatientAssessments from './pages/patient/Assessments';
 import PsychologistDashboard from './pages/psychologist/Dashboard';
 import PsychologistPatients from './pages/psychologist/Patients';
 import PsychologistAppointments from './pages/psychologist/Appointments';
 import PsychologistMessages from './pages/psychologist/Messages';
 import PsychologistTasks from './pages/psychologist/Tasks';
 import PsychologistMaterials from './pages/psychologist/Materials';
+import PatientRecord from './pages/psychologist/PatientRecord';
+import PsychologistPatientAssessments from './pages/psychologist/PatientAssessments';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children, allowedRoles }: { children: JSX.Element; allowedRoles: ('patient' | 'psychologist')[] }) {
@@ -58,6 +61,7 @@ function AppRoutes() {
             <Route path="tasks" element={<PatientTasks />} />
             <Route path="materials" element={<PatientMaterials />} />
             <Route path="messages" element={<PatientMessages />} />
+            <Route path="assessments" element={<PatientAssessments />} />
           </>
         )}
         
@@ -69,6 +73,8 @@ function AppRoutes() {
             <Route path="messages" element={<PsychologistMessages />} />
             <Route path="tasks" element={<PsychologistTasks />} />
             <Route path="materials" element={<PsychologistMaterials />} />
+            <Route path="patients/:patientId/record" element={<PatientRecord />} />
+            <Route path="patients/:patientId/assessments" element={<PsychologistPatientAssessments />} />
           </>
         )}
       </Route>
