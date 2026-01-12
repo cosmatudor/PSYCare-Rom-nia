@@ -39,6 +39,7 @@ export default function Layout() {
     { path: '/academic', label: 'Articole' },
     { path: '/forum', label: 'Forum' },
     { path: '/wellbeing', label: 'Bunăstare' },
+    { path: '/administrative', label: 'Administrativ' },
   ];
 
   const navItems = user?.role === 'patient' ? patientNav : psychologistNav;

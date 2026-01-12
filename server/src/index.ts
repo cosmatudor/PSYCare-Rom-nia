@@ -15,6 +15,9 @@ import assessmentsRoutes from './routes/assessments.js';
 import academicResourcesRoutes from './routes/academicResources.js';
 import forumRoutes from './routes/forum.js';
 import psychologistWellbeingRoutes from './routes/psychologistWellbeing.js';
+import billingRoutes from './routes/billing.js';
+import gdprRoutes from './routes/gdpr.js';
+import backupRoutes from './routes/backup.js';
 import { authenticateToken } from './middleware/auth.js';
 
 dotenv.config();
@@ -41,6 +44,9 @@ app.use('/api/assessments', authenticateToken, assessmentsRoutes);
 app.use('/api/academic', authenticateToken, academicResourcesRoutes);
 app.use('/api/forum', authenticateToken, forumRoutes);
 app.use('/api/wellbeing', authenticateToken, psychologistWellbeingRoutes);
+app.use('/api/billing', authenticateToken, billingRoutes);
+app.use('/api/gdpr', authenticateToken, gdprRoutes);
+app.use('/api/backup', authenticateToken, backupRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'PSYCare API is running' });
