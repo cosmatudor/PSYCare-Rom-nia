@@ -5,9 +5,13 @@ interface PsychoEducationMaterial {
   id: string;
   title: string;
   description: string;
-  type: 'video' | 'podcast' | 'infographic';
+  type: 'video' | 'podcast' | 'infographic' | 'file' | 'worksheet';
   category: 'anxiety' | 'depression' | 'stress' | 'mindfulness' | 'cbt' | 'general';
   url: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  fileType?: string;
   thumbnailUrl?: string;
   duration?: number;
 }
@@ -141,6 +145,53 @@ export default function PatientMaterials() {
               )}
             </div>
           )}
+
+          {(selectedMaterial.type === 'file' || selectedMaterial.type === 'worksheet') && (
+            <div className="mb-4">
+              <div className="bg-gray-50 rounded-lg p-6 border-2 border-dashed border-gray-300">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">
+                    {selectedMaterial.type === 'file' ? '📄' : '📝'}
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">
+                    {selectedMaterial.fileName || 'Fișier'}
+                  </h3>
+                  {selectedMaterial.fileSize && (
+                    <p className="text-gray-600 mb-4">
+                      Mărime: {(selectedMaterial.fileSize / 1024).toFixed(2)} KB
+                    </p>
+                  )}
+                  {selectedMaterial.fileUrl ? (
+                    <a
+                      href={selectedMaterial.fileUrl}
+                      download={selectedMaterial.fileName || 'download'}
+                      className="inline-block bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition"
+                    >
+                      📥 Descarcă fișierul
+                    </a>
+                  ) : selectedMaterial.url ? (
+                    <a
+                      href={selectedMaterial.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition"
+                    >
+                      📥 Deschide fișierul
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+              {selectedMaterial.fileType === 'application/pdf' && selectedMaterial.fileUrl && (
+                <div className="mt-4">
+                  <iframe
+                    src={selectedMaterial.fileUrl}
+                    className="w-full h-96 rounded-lg border"
+                    title={selectedMaterial.title}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -186,6 +237,8 @@ export default function PatientMaterials() {
                 {material.type === 'video' && '🎥'}
                 {material.type === 'podcast' && '🎙️'}
                 {material.type === 'infographic' && '📊'}
+                {material.type === 'file' && '📄'}
+                {material.type === 'worksheet' && '📝'}
               </div>
               <h3 className="text-xl font-semibold mb-2">{material.title}</h3>
               <p className="text-gray-600 text-sm mb-3 line-clamp-2">{material.description}</p>
@@ -196,6 +249,11 @@ export default function PatientMaterials() {
                 {material.duration && (
                   <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
                     {material.duration} min
+                  </span>
+                )}
+                {material.fileName && (
+                  <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">
+                    📎 {material.fileName}
                   </span>
                 )}
               </div>

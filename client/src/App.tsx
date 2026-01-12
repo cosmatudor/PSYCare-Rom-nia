@@ -17,6 +17,8 @@ import PsychologistTasks from './pages/psychologist/Tasks';
 import PsychologistMaterials from './pages/psychologist/Materials';
 import PatientRecord from './pages/psychologist/PatientRecord';
 import PsychologistPatientAssessments from './pages/psychologist/PatientAssessments';
+import PsychologistAcademicResources from './pages/psychologist/AcademicResources';
+import PsychologistForum from './pages/psychologist/Forum';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children, allowedRoles }: { children: JSX.Element; allowedRoles: ('patient' | 'psychologist')[] }) {
@@ -73,6 +75,8 @@ function AppRoutes() {
             <Route path="messages" element={<PsychologistMessages />} />
             <Route path="tasks" element={<PsychologistTasks />} />
             <Route path="materials" element={<PsychologistMaterials />} />
+            <Route path="academic" element={<PsychologistAcademicResources />} />
+            <Route path="forum" element={<PsychologistForum />} />
             <Route path="patients/:patientId/record" element={<PatientRecord />} />
             <Route path="patients/:patientId/assessments" element={<PsychologistPatientAssessments />} />
           </>

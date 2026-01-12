@@ -12,6 +12,8 @@ import tasksRoutes from './routes/tasks.js';
 import materialsRoutes from './routes/materials.js';
 import patientRecordsRoutes from './routes/patientRecords.js';
 import assessmentsRoutes from './routes/assessments.js';
+import academicResourcesRoutes from './routes/academicResources.js';
+import forumRoutes from './routes/forum.js';
 import { authenticateToken } from './middleware/auth.js';
 
 dotenv.config();
@@ -35,6 +37,8 @@ app.use('/api/tasks', authenticateToken, tasksRoutes);
 app.use('/api/materials', authenticateToken, materialsRoutes);
 app.use('/api/records', authenticateToken, patientRecordsRoutes);
 app.use('/api/assessments', authenticateToken, assessmentsRoutes);
+app.use('/api/academic', authenticateToken, academicResourcesRoutes);
+app.use('/api/forum', authenticateToken, forumRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'PSYCare API is running' });

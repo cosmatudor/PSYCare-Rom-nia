@@ -5,11 +5,17 @@ import { v4 as uuidv4 } from 'uuid';
 export interface PsychoEducationMaterial {
   id: string;
   psychologistId?: string; // undefined = material general disponibil tuturor
+  patientIds?: string[]; // IDs of specific patients (if empty or undefined, available to all psychologist's patients)
+  isGeneral?: boolean; // true = available to all patients of all psychologists
   title: string;
   description: string;
-  type: 'video' | 'podcast' | 'infographic';
+  type: 'video' | 'podcast' | 'infographic' | 'file' | 'worksheet';
   category: 'anxiety' | 'depression' | 'stress' | 'mindfulness' | 'cbt' | 'general';
-  url: string; // URL pentru video/podcast sau link către infographic
+  url: string; // URL pentru video/podcast sau link către infographic/file
+  fileUrl?: string; // Base64 data URL pentru fișiere încărcate
+  fileName?: string; // Numele fișierului pentru documente
+  fileSize?: number; // Mărimea fișierului în bytes
+  fileType?: string; // Tipul fișierului (application/pdf, etc.)
   thumbnailUrl?: string; // Pentru video/infographic
   duration?: number; // În minute, pentru video/podcast
   createdAt: string;
@@ -56,11 +62,27 @@ export function createMaterial(material: Omit<PsychoEducationMaterial, 'id' | 'c
 
 export function getMaterialsForPatient(patientId: string, psychologistId?: string): PsychoEducationMaterial[] {
   const materials = getMaterials();
-  // Return general materials + materials from patient's psychologist
-  return materials.filter(m => 
-    !m.psychologistId || // General materials
-    m.psychologistId === psychologistId // Materials from patient's psychologist
-  );
+  // Return:
+  // 1. General materials (isGeneral = true or no psychologistId and no patientIds)
+  // 2. Materials from patient's psychologist (if no specific patientIds or patient is in patientIds)
+  return materials.filter(m => {
+    // General materials available to everyone
+    if (m.isGeneral || (!m.psychologistId && !m.patientIds)) {
+      return true;
+    }
+    
+    // Materials from patient's psychologist
+    if (m.psychologistId === psychologistId) {
+      // If no specific patientIds, available to all patients of this psychologist
+      if (!m.patientIds || m.patientIds.length === 0) {
+        return true;
+      }
+      // If specific patientIds, check if this patient is included
+      return m.patientIds.includes(patientId);
+    }
+    
+    return false;
+  });
 }
 
 export function getMaterialsByPsychologist(psychologistId: string): PsychoEducationMaterial[] {

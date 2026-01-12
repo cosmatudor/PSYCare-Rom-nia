@@ -42,25 +42,53 @@ router.get('/all', async (req: AuthRequest, res) => {
 // Create material (psychologist)
 router.post('/', async (req: AuthRequest, res) => {
   try {
-    const { title, description, type, category, url, thumbnailUrl, duration } = req.body;
+    const { title, description, type, category, url, fileUrl, fileName, fileSize, fileType, thumbnailUrl, duration, patientIds, isGeneral } = req.body;
 
     if (req.userRole !== 'psychologist') {
       return res.status(403).json({ error: 'Only psychologists can create materials' });
     }
 
-    if (!title || !description || !type || !category || !url) {
+    if (!title || !description || !type || !category) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // For file/worksheet types, require fileUrl or url
+    if ((type === 'file' || type === 'worksheet') && !fileUrl && !url) {
+      return res.status(400).json({ error: 'File URL or file data is required for file/worksheet types' });
+    }
+
+    // For other types, require url
+    if (type !== 'file' && type !== 'worksheet' && !url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+
+    // Validate patientIds if provided
+    let validatedPatientIds: string[] | undefined = undefined;
+    if (patientIds && Array.isArray(patientIds) && patientIds.length > 0) {
+      const users = getUsers();
+      // Verify all patient IDs belong to this psychologist
+      const validPatients = patientIds.filter((pid: string) => {
+        const patient = users.find(u => u.id === pid);
+        return patient && patient.role === 'patient' && patient.psychologistId === req.userId;
+      });
+      validatedPatientIds = validPatients.length > 0 ? validPatients : undefined;
+    }
+
     const material = createMaterial({
-      psychologistId: req.userId,
+      psychologistId: isGeneral ? undefined : req.userId,
+      patientIds: validatedPatientIds,
+      isGeneral: isGeneral === true,
       title,
       description,
       type,
       category,
-      url,
+      url: url || fileUrl || '',
+      fileUrl,
+      fileName,
+      fileSize: fileSize ? Number(fileSize) : undefined,
+      fileType,
       thumbnailUrl,
-      duration
+      duration: duration ? Number(duration) : undefined
     });
 
     res.status(201).json(material);
