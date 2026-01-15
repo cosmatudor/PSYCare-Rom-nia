@@ -20,6 +20,8 @@ server/data/
 !package.json
 !package-lock.json
 !tsconfig.json
+server/.env
+server/psycare-484414-38ea000c3eaf.json
 
 # IDE
 .vscode/
