@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface JournalEntry {
@@ -15,13 +15,16 @@ interface JournalEntry {
 }
 
 export default function PatientDashboard() {
-  const { user } = useAuth();
+  const { user, updatePsychologistId } = useAuth();
   const [mood, setMood] = useState(5);
   const [anxiety, setAnxiety] = useState(5);
   const [sleep, setSleep] = useState(8);
   const [stress, setStress] = useState(5);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPsychologistForm, setShowPsychologistForm] = useState(false);
+  const [psychologistIdInput, setPsychologistIdInput] = useState('');
+  const [psychologistError, setPsychologistError] = useState('');
 
   useEffect(() => {
     loadJournalEntries();
@@ -63,6 +66,25 @@ export default function PatientDashboard() {
     }
   };
 
+  const handlePsychologistSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPsychologistError('');
+    
+    if (!psychologistIdInput.trim()) {
+      setPsychologistError('Te rugăm să introduci ID-ul psihologului');
+      return;
+    }
+
+    try {
+      await updatePsychologistId(psychologistIdInput.trim());
+      setShowPsychologistForm(false);
+      setPsychologistIdInput('');
+      alert('Te-ai înrolat cu succes la psiholog!');
+    } catch (error: any) {
+      setPsychologistError(error.response?.data?.error || 'Eroare la înrolarea la psiholog');
+    }
+  };
+
   const chartData = journalEntries
     .slice(-14)
     .map(entry => ({
@@ -78,6 +100,70 @@ export default function PatientDashboard() {
   return (
     <div className="px-4 py-6">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Dashboard</h1>
+
+      {/* Psychologist Enrollment Section */}
+      {!user?.psychologistId && (
+        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-6">
+          <div className="flex items-start gap-4">
+            <div className="text-4xl">👨‍⚕️</div>
+            <div className="flex-1">
+              <h2 className="text-xl font-semibold text-yellow-900 mb-2">
+                Înrolează-te la un psiholog
+              </h2>
+              <p className="text-yellow-800 mb-4">
+                Pentru a beneficia de toate funcționalitățile aplicației, te rugăm să te înrolezi la un psiholog. 
+                Cere-i psihologului tău ID-ul său și introdu-l mai jos.
+              </p>
+              {!showPsychologistForm ? (
+                <button
+                  onClick={() => setShowPsychologistForm(true)}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
+                >
+                  Introdu ID-ul psihologului
+                </button>
+              ) : (
+                <form onSubmit={handlePsychologistSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="psychologistId" className="block text-sm font-medium text-yellow-900 mb-2">
+                      ID Psiholog
+                    </label>
+                    <input
+                      id="psychologistId"
+                      type="text"
+                      value={psychologistIdInput}
+                      onChange={(e) => setPsychologistIdInput(e.target.value)}
+                      placeholder="Introdu ID-ul psihologului tău"
+                      className="w-full px-3 py-2 border border-yellow-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    />
+                    {psychologistError && (
+                      <p className="mt-1 text-sm text-red-600">{psychologistError}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
+                    >
+                      Salvează
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPsychologistForm(false);
+                        setPsychologistIdInput('');
+                        setPsychologistError('');
+                      }}
+                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md font-medium transition-colors"
+                    >
+                      Anulează
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Daily Tracking Form */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -203,37 +289,56 @@ export default function PatientDashboard() {
       {/* Charts */}
       {chartData.length > 0 && (
         <div className="space-y-6">
-          {/* Mood Chart */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Evoluția stării de spirit</h2>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis domain={[0, 10]} />
-                <Tooltip />
-                <Line type="monotone" dataKey="mood" stroke="#0284c7" strokeWidth={2} name="Stare de spirit" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Anxiety Chart */}
-          {chartData.some(d => d.anxiety !== null) && (
+          {/* Combined Chart for Mood, Anxiety, and Stress (all 0-10 scale) */}
+          {(chartData.some(d => d.mood !== null) || 
+            chartData.some(d => d.anxiety !== null) || 
+            chartData.some(d => d.stress !== null)) && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Evoluția anxietății</h2>
-              <ResponsiveContainer width="100%" height={250}>
+              <h2 className="text-xl font-semibold mb-4">Evoluția stării de spirit, anxietății și stresului</h2>
+              <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis domain={[0, 10]} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="anxiety" stroke="#dc2626" strokeWidth={2} name="Anxietate" />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="mood" 
+                    stroke="#0284c7" 
+                    strokeWidth={2} 
+                    name="Stare de spirit"
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                  {chartData.some(d => d.anxiety !== null) && (
+                    <Line 
+                      type="monotone" 
+                      dataKey="anxiety" 
+                      stroke="#dc2626" 
+                      strokeWidth={2} 
+                      name="Anxietate"
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  )}
+                  {chartData.some(d => d.stress !== null) && (
+                    <Line 
+                      type="monotone" 
+                      dataKey="stress" 
+                      stroke="#ea580c" 
+                      strokeWidth={2} 
+                      name="Stres"
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>
           )}
 
-          {/* Sleep Chart */}
+          {/* Sleep Chart (separate because it has different scale 0-12) */}
           {chartData.some(d => d.sleep !== null) && (
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-semibold mb-4">Evoluția somnului (ore)</h2>
@@ -243,23 +348,15 @@ export default function PatientDashboard() {
                   <XAxis dataKey="date" />
                   <YAxis domain={[0, 12]} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="sleep" stroke="#2563eb" strokeWidth={2} name="Somn (ore)" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {/* Stress Chart */}
-          {chartData.some(d => d.stress !== null) && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Evoluția nivelului de stres</h2>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis domain={[0, 10]} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="stress" stroke="#ea580c" strokeWidth={2} name="Stres" />
+                  <Line 
+                    type="monotone" 
+                    dataKey="sleep" 
+                    stroke="#2563eb" 
+                    strokeWidth={2} 
+                    name="Somn (ore)"
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>

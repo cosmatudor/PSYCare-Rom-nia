@@ -1,13 +1,14 @@
 import express from 'express';
 import { AuthRequest } from '../middleware/auth.js';
 import { createAppointment, getAppointmentsByPatient, getAppointmentsByPsychologist, getAppointments, saveAppointments } from '../data/appointments.js';
+import { createMeetSpace, getMeetSpace, endActiveConference } from '../services/googleMeet.js';
 
 const router = express.Router();
 
 // Create appointment
 router.post('/', async (req: AuthRequest, res) => {
   try {
-    const { patientId, dateTime, duration, type, meetingLink } = req.body;
+    const { patientId, dateTime, duration, type, meetingLink, createGoogleMeet } = req.body;
 
     if (req.userRole !== 'psychologist') {
       return res.status(403).json({ error: 'Only psychologists can create appointments' });
@@ -17,17 +18,44 @@ router.post('/', async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    let finalMeetingLink = meetingLink;
+    let meetSpaceName: string | undefined;
+
+    // Create Google Meet link if requested and type is online
+    if ((createGoogleMeet || type === 'online') && !meetingLink) {
+      try {
+        const meetSpace = await createMeetSpace();
+        finalMeetingLink = meetSpace.meetingUri;
+        meetSpaceName = meetSpace.spaceName;
+      } catch (error: any) {
+        console.error('Failed to create Google Meet:', error);
+        // Continue without Meet link if creation fails
+        if (createGoogleMeet) {
+          return res.status(500).json({ 
+            error: 'Failed to create Google Meet space',
+            details: error.message || 'Unknown error'
+          });
+        }
+      }
+    }
+
     const appointment = createAppointment({
       patientId,
       psychologistId: req.userId!,
       dateTime,
       duration,
       type: type || 'online',
-      meetingLink,
+      meetingLink: finalMeetingLink,
       status: 'scheduled'
     });
 
-    res.status(201).json(appointment);
+    // Add meet space name to response if created
+    const response: any = { ...appointment };
+    if (meetSpaceName) {
+      response.meetSpaceName = meetSpaceName;
+    }
+
+    res.status(201).json(response);
   } catch (error: any) {
     console.error('Appointment creation error:', error);
     res.status(500).json({ 
@@ -76,6 +104,62 @@ router.put('/:id', async (req: AuthRequest, res) => {
     res.json(appointment);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update appointment' });
+  }
+});
+
+// Create Google Meet space
+router.post('/meet/create', async (req: AuthRequest, res) => {
+  try {
+    if (req.userRole !== 'psychologist') {
+      return res.status(403).json({ error: 'Only psychologists can create Google Meet spaces' });
+    }
+
+    const meetSpace = await createMeetSpace();
+    res.json(meetSpace);
+  } catch (error: any) {
+    console.error('Error creating Google Meet space:', error);
+    res.status(500).json({ 
+      error: 'Failed to create Google Meet space',
+      details: error.message || 'Unknown error'
+    });
+  }
+});
+
+// Get Google Meet space details
+router.get('/meet/:spaceName', async (req: AuthRequest, res) => {
+  try {
+    const { spaceName } = req.params;
+    const fullSpaceName = spaceName.startsWith('spaces/') ? spaceName : `spaces/${spaceName}`;
+    
+    const meetSpace = await getMeetSpace(fullSpaceName);
+    res.json(meetSpace);
+  } catch (error: any) {
+    console.error('Error getting Google Meet space:', error);
+    res.status(500).json({ 
+      error: 'Failed to get Google Meet space',
+      details: error.message || 'Unknown error'
+    });
+  }
+});
+
+// End active conference
+router.post('/meet/:spaceName/end', async (req: AuthRequest, res) => {
+  try {
+    if (req.userRole !== 'psychologist') {
+      return res.status(403).json({ error: 'Only psychologists can end conferences' });
+    }
+
+    const { spaceName } = req.params;
+    const fullSpaceName = spaceName.startsWith('spaces/') ? spaceName : `spaces/${spaceName}`;
+    
+    await endActiveConference(fullSpaceName);
+    res.json({ success: true, message: 'Conference ended successfully' });
+  } catch (error: any) {
+    console.error('Error ending conference:', error);
+    res.status(500).json({ 
+      error: 'Failed to end conference',
+      details: error.message || 'Unknown error'
+    });
   }
 });
 

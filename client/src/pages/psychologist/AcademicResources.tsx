@@ -36,6 +36,8 @@ export default function AcademicResources() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'saved'>('all');
   const [loading, setLoading] = useState(true);
+  const [searchSource, setSearchSource] = useState<'local' | 'pubmed'>('local');
+  const [searchingPubMed, setSearchingPubMed] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -55,16 +57,26 @@ export default function AcademicResources() {
   }, []);
 
   useEffect(() => {
-    if (searchQuery) {
+    if (searchQuery && searchSource === 'local') {
       searchArticles();
-    } else {
+    } else if (!searchQuery) {
       loadArticles();
     }
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory]);
 
   const loadArticles = async () => {
     try {
-      const params = selectedCategory !== 'all' ? { category: selectedCategory } : {};
+      setLoading(true);
+      const params: any = {};
+      
+      if (selectedCategory !== 'all') {
+        params.category = selectedCategory;
+      }
+      
+      if (searchSource === 'pubmed') {
+        params.source = 'pubmed';
+      }
+      
       const response = await axios.get('/api/academic', { params });
       setArticles(response.data);
     } catch (error) {
@@ -85,10 +97,22 @@ export default function AcademicResources() {
 
   const searchArticles = async () => {
     try {
-      const response = await axios.get('/api/academic', { params: { search: searchQuery } });
+      setSearchingPubMed(searchSource === 'pubmed');
+      setLoading(true);
+      
+      const params: any = { search: searchQuery };
+      if (searchSource === 'pubmed') {
+        params.source = 'pubmed';
+      }
+      
+      const response = await axios.get('/api/academic', { params });
       setArticles(response.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to search articles', error);
+      alert(error.response?.data?.error || 'Eroare la căutarea articolelor');
+    } finally {
+      setLoading(false);
+      setSearchingPubMed(false);
     }
   };
 
@@ -99,6 +123,49 @@ export default function AcademicResources() {
       await loadArticles();
     } catch (error) {
       alert('Eroare la salvarea articolului');
+    }
+  };
+
+  const handleImportFromPubMed = async (article: AcademicArticle) => {
+    try {
+      // Extract PMID from URL if available
+      const pmidMatch = article.url?.match(/pubmed\.ncbi\.nlm\.nih\.gov\/(\d+)/);
+      const pmid = pmidMatch ? pmidMatch[1] : null;
+      
+      if (!pmid) {
+        // Try to create article directly if no PMID
+        try {
+          await axios.post('/api/academic', {
+            title: article.title,
+            authors: article.authors,
+            journal: article.journal,
+            year: article.year,
+            abstract: article.abstract,
+            doi: article.doi,
+            url: article.url,
+            keywords: article.keywords,
+            category: article.category || 'general',
+            source: 'pubmed'
+          });
+          alert('Articolul a fost importat cu succes în baza de date locală!');
+          await loadArticles();
+          await loadSavedArticles();
+        } catch (error: any) {
+          alert(error.response?.data?.error || 'Eroare la importarea articolului');
+        }
+        return;
+      }
+
+      const response = await axios.post('/api/academic/pubmed/import', {
+        pmid,
+        category: article.category || 'general'
+      });
+
+      alert('Articolul a fost importat cu succes în baza de date locală!');
+      await loadArticles();
+      await loadSavedArticles();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Eroare la importarea articolului');
     }
   };
 
@@ -305,14 +372,69 @@ export default function AcademicResources() {
       {/* Search and Filters */}
       {activeTab === 'all' && (
         <div className="mb-6 space-y-4">
-          <div>
+          {/* Search Source Toggle */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-medium text-gray-700">Sursă de căutare:</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setSearchSource('local');
+                    setSearchQuery('');
+                    loadArticles();
+                  }}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    searchSource === 'local'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  📚 Baza de date locală
+                </button>
+                <button
+                  onClick={() => {
+                    setSearchSource('pubmed');
+                    setSearchQuery('');
+                  }}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    searchSource === 'pubmed'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  🔬 PubMed (live)
+                </button>
+              </div>
+            </div>
+            {searchSource === 'pubmed' && (
+              <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
+                💡 Căutare în timp real în baza de date PubMed. Rezultatele sunt actualizate automat.
+              </div>
+            )}
+          </div>
+          
+          <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Caută articole..."
+              placeholder={searchSource === 'pubmed' ? "Caută în PubMed (ex: cognitive behavioral therapy anxiety)..." : "Caută articole..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  searchArticles();
+                }
+              }}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md"
             />
+            {searchQuery && (
+              <button
+                onClick={searchArticles}
+                disabled={searchingPubMed}
+                className="bg-primary-600 text-white px-6 py-2 rounded-md hover:bg-primary-700 disabled:opacity-50"
+              >
+                {searchingPubMed ? 'Căutare...' : 'Caută'}
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {['all', ...Object.keys(categoryLabels)].map(category => (
@@ -380,16 +502,29 @@ export default function AcademicResources() {
                     </a>
                   )}
                 </div>
-                <button
-                  onClick={() => isSaved(article.id) ? handleUnsaveArticle(article.id) : handleSaveArticle(article.id)}
-                  className={`ml-4 px-3 py-1 rounded text-sm ${
-                    isSaved(article.id)
-                      ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {isSaved(article.id) ? '✓ Salvat' : 'Salvează'}
-                </button>
+                <div className="flex gap-2">
+                  {searchSource === 'pubmed' && article.source === 'pubmed' && (
+                    <button
+                      onClick={() => handleImportFromPubMed(article)}
+                      className="px-3 py-1 rounded text-sm bg-green-100 text-green-700 hover:bg-green-200"
+                      title="Importă articolul în baza de date locală"
+                    >
+                      📥 Importă
+                    </button>
+                  )}
+                  {article.id && (
+                    <button
+                      onClick={() => isSaved(article.id) ? handleUnsaveArticle(article.id) : handleSaveArticle(article.id)}
+                      className={`px-3 py-1 rounded text-sm ${
+                        isSaved(article.id)
+                          ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {isSaved(article.id) ? '✓ Salvat' : 'Salvează'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}

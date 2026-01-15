@@ -169,9 +169,9 @@ export default function PatientSchedules() {
                         href={appointment.meetingLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-primary-600 hover:text-primary-700 mt-2 inline-block"
+                        className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
                       >
-                        Link ședință →
+                        <span>🔗 Join Google Meet</span>
                       </a>
                     )}
                   </div>

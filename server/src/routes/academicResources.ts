@@ -10,6 +10,7 @@ import {
   getSavedArticles,
   ensureMinimumArticles
 } from '../data/academicResources.js';
+import { searchPubMed, searchPubMedByCategory, mapPubMedToAcademicArticle } from '../services/pubmedApi.js';
 
 const router = express.Router();
 
@@ -19,8 +20,37 @@ router.get('/', async (req: AuthRequest, res) => {
     // Ensure minimum articles exist
     ensureMinimumArticles();
     
-    const { category, search } = req.query;
+    const { category, search, source } = req.query;
     
+    // If source is 'pubmed', search PubMed API directly
+    if (source === 'pubmed' && search && typeof search === 'string') {
+      try {
+        const pubmedArticles = await searchPubMed(search, 20);
+        const mappedArticles = pubmedArticles.map(article => 
+          mapPubMedToAcademicArticle(article, category as any || 'general')
+        );
+        return res.json(mappedArticles);
+      } catch (error: any) {
+        console.error('Error searching PubMed:', error);
+        return res.status(500).json({ error: 'Failed to search PubMed: ' + error.message });
+      }
+    }
+    
+    // If source is 'pubmed' and category is specified, search by category
+    if (source === 'pubmed' && category && typeof category === 'string') {
+      try {
+        const pubmedArticles = await searchPubMedByCategory(category as any, 20);
+        const mappedArticles = pubmedArticles.map(article => 
+          mapPubMedToAcademicArticle(article, category as any)
+        );
+        return res.json(mappedArticles);
+      } catch (error: any) {
+        console.error('Error searching PubMed by category:', error);
+        return res.status(500).json({ error: 'Failed to search PubMed: ' + error.message });
+      }
+    }
+    
+    // Otherwise, search local articles
     let articles;
     if (search && typeof search === 'string') {
       articles = searchArticles(search);
@@ -91,6 +121,70 @@ router.delete('/:articleId/save', async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error unsaving article:', error);
     res.status(500).json({ error: 'Failed to unsave article' });
+  }
+});
+
+// Search PubMed API directly
+router.get('/pubmed/search', async (req: AuthRequest, res) => {
+  try {
+    const { query, maxResults = 20 } = req.query;
+    
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'Query parameter is required' });
+    }
+    
+    const pubmedArticles = await searchPubMed(query, Number(maxResults));
+    const mappedArticles = pubmedArticles.map(article => 
+      mapPubMedToAcademicArticle(article, 'general')
+    );
+    
+    res.json(mappedArticles);
+  } catch (error: any) {
+    console.error('Error searching PubMed:', error);
+    res.status(500).json({ error: 'Failed to search PubMed: ' + error.message });
+  }
+});
+
+// Import article from PubMed to local database
+router.post('/pubmed/import', async (req: AuthRequest, res) => {
+  try {
+    if (req.userRole !== 'psychologist') {
+      return res.status(403).json({ error: 'Only psychologists can import articles' });
+    }
+    
+    const { pmid, category = 'general' } = req.body;
+    
+    if (!pmid) {
+      return res.status(400).json({ error: 'PMID is required' });
+    }
+    
+    // Search for the specific article by PMID
+    const pubmedArticles = await searchPubMed(`pmid:${pmid}`, 1);
+    
+    if (pubmedArticles.length === 0) {
+      return res.status(404).json({ error: 'Article not found in PubMed' });
+    }
+    
+    const pubmedArticle = pubmedArticles[0];
+    const articleData = mapPubMedToAcademicArticle(pubmedArticle, category as any);
+    
+    // Check if article already exists (by DOI or URL)
+    const existingArticles = getAllArticles();
+    const existing = existingArticles.find(a => 
+      a.doi === articleData.doi || a.url === articleData.url
+    );
+    
+    if (existing) {
+      return res.json({ ...existing, message: 'Article already exists' });
+    }
+    
+    // Create article in local database
+    const article = createArticle(articleData);
+    
+    res.status(201).json(article);
+  } catch (error: any) {
+    console.error('Error importing article from PubMed:', error);
+    res.status(500).json({ error: error.message || 'Failed to import article' });
   }
 });
 

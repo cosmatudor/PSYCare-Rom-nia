@@ -14,6 +14,7 @@ interface AuthContextType {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, role: 'patient' | 'psychologist', psychologistId?: string) => Promise<void>;
+  updatePsychologistId: (psychologistId: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
 }
@@ -87,6 +88,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
   };
 
+  const updatePsychologistId = async (psychologistId: string) => {
+    const response = await axios.put('/api/auth/patient/psychologist', {
+      psychologistId
+    });
+    const updatedUser = response.data;
+    
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -96,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, updatePsychologistId, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

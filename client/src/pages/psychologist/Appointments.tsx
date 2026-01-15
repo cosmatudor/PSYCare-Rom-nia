@@ -118,31 +118,31 @@ export default function PsychologistAppointments() {
     }
   };
 
-  const generateMeetingLink = (type: 'zoom' | 'meet'): string => {
-    if (type === 'zoom') {
-      // Generate a Zoom meeting link format (in production, use Zoom API)
-      const meetingId = Math.random().toString(36).substring(2, 15);
-      return `https://zoom.us/j/${meetingId}`;
-    } else {
-      // Generate a Google Meet link format (in production, use Google Calendar API)
-      const meetingCode = Math.random().toString(36).substring(2, 12);
-      return `https://meet.google.com/${meetingCode}`;
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       let finalFormData = { ...formData };
       
-      // Auto-generate meeting link if requested
+      // Auto-generate Google Meet link if requested
       if (formData.type === 'online' && formData.autoGenerateLink && !formData.meetingLink) {
-        // Default to Google Meet, but could be made configurable
-        finalFormData.meetingLink = generateMeetingLink('meet');
-        alert(`Link generat automat: ${finalFormData.meetingLink}\n\nNotă: În producție, acest link ar fi generat prin API-ul Zoom/Google Meet.`);
+        try {
+          // Create Google Meet space via API
+          const meetResponse = await axios.post('/api/appointments/meet/create');
+          finalFormData.meetingLink = meetResponse.data.meetingUri;
+          console.log('Google Meet space created:', meetResponse.data);
+        } catch (meetError: any) {
+          console.error('Failed to create Google Meet:', meetError);
+          // If Google Meet creation fails, the backend will handle it
+          // We'll pass createGoogleMeet flag to let backend try
+          finalFormData = { ...finalFormData, createGoogleMeet: true } as any;
+        }
       }
 
-      await axios.post('/api/appointments', finalFormData);
+      await axios.post('/api/appointments', {
+        ...finalFormData,
+        createGoogleMeet: formData.type === 'online' && formData.autoGenerateLink && !formData.meetingLink
+      });
+      
       setShowForm(false);
       setFormData({
         patientId: '',
@@ -153,10 +153,10 @@ export default function PsychologistAppointments() {
         autoGenerateLink: false
       });
       await loadAppointments();
-      alert('Programarea a fost creată!');
+      alert('Programarea a fost creată cu succes!');
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Eroare la crearea programării';
-      alert(errorMessage);
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || 'Eroare la crearea programării';
+      alert(`Eroare: ${errorMessage}`);
       console.error('Appointment creation error:', error);
     }
   };
@@ -422,11 +422,11 @@ export default function PsychologistAppointments() {
                       className="rounded"
                     />
                     <span className="text-sm font-medium text-gray-700">
-                      Generează automat link pentru ședință (Google Meet)
+                      Generează automat link Google Meet
                     </span>
                   </label>
                   <p className="text-xs text-gray-500 mt-1 ml-6">
-                    Notă: În producție, acest link ar fi generat prin API-ul Zoom/Google Meet
+                    Un link Google Meet va fi generat automat prin API-ul Google Meet
                   </p>
                 </div>
                 {!formData.autoGenerateLink && (
@@ -487,15 +487,38 @@ export default function PsychologistAppointments() {
                     <p className="text-gray-600">
                       Durată: {appointment.duration} minute | {appointment.type === 'online' ? 'Online' : 'Offline'}
                     </p>
-                    {appointment.type === 'online' && appointment.meetingLink && (
-                      <a
-                        href={appointment.meetingLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary-600 hover:text-primary-700 mt-2 inline-block"
-                      >
-                        Link ședință →
-                      </a>
+                    {appointment.type === 'online' && (
+                      <div className="mt-2">
+                        {appointment.meetingLink ? (
+                          <a
+                            href={appointment.meetingLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium"
+                          >
+                            <span>🔗 Join Google Meet</span>
+                            <span>→</span>
+                          </a>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const meetResponse = await axios.post('/api/appointments/meet/create');
+                                await axios.put(`/api/appointments/${appointment.id}`, {
+                                  meetingLink: meetResponse.data.meetingUri
+                                });
+                                await loadAppointments();
+                                alert('Link Google Meet creat cu succes!');
+                              } catch (error: any) {
+                                alert('Eroare la crearea link-ului Google Meet: ' + (error.response?.data?.error || error.message));
+                              }
+                            }}
+                            className="text-primary-600 hover:text-primary-700 font-medium"
+                          >
+                            ➕ Creează link Google Meet
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-col gap-2 items-end">
